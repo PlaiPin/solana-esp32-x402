@@ -1,0 +1,31 @@
+# ESP32-S3 Configuration
+CONFIG_IDF_TARGET="esp32s3"
+
+# Enable Wi-Fi
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+
+# Enable HTTPS
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# Enable NVS (encryption will be added later after secure configuration)
+# CONFIG_NVS_ENCRYPTION=y
+
+# Increase main task stack size for crypto operations and transaction building
+# TweetNaCl signing + transaction serialization + Base58 encoding needs ~16KB
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# Optimize for performance
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Enable hardware SHA acceleration
+CONFIG_MBEDTLS_HARDWARE_SHA=y
+
+# Increase HTTP buffer sizes for RPC calls
+CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=y
+
+# Enable logging
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+

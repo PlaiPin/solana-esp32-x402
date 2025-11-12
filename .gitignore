@@ -1,0 +1,68 @@
+# ESP-IDF Build Output
+build/
+*.bin
+*.elf
+*.map
+
+# SDK Configuration
+sdkconfig.old
+sdkconfig.*.old
+
+# Dependencies
+dependencies.lock
+managed_components/
+
+# Flash downloads
+*.flash_args
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+
+# IDE - CLion/IntelliJ
+.idea/
+cmake-build-*/
+
+# IDE - Eclipse
+.cproject
+.project
+.settings/
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Backup files
+*~
+*.bak
+*.swp
+*.swo
+
+# Certificate and key files (if any)
+*.pem
+*.key
+*.crt
+
+# Test coverage
+*.gcov
+*.gcda
+*.gcno
+
