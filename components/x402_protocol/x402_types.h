@@ -25,33 +25,34 @@ extern "C" {
 #define X402_NETWORK_SOLANA_MAINNET "solana-mainnet"
 
 /**
- * @brief Network-specific payload (part of PaymentPayload kind)
+ * @brief Network-specific payload (part of PaymentPayload)
  * This is generic and works for Solana, Ethereum, etc.
  */
 typedef struct {
     char *transaction;              // Base64-encoded signed transaction
-    // Future: additional fields can go in "extra"
 } x402_network_payload_t;
 
 /**
- * @brief Payment Kind (x402 spec)
+ * @brief Complete Payment Payload (x402 spec)
+ * 
+ * JSON structure (FLAT - all fields at root level):
+ * {
+ *   "x402Version": 1,
+ *   "scheme": "exact",
+ *   "network": "solana-devnet",
+ *   "payload": {
+ *     "transaction": "<base64-encoded-tx>"
+ *   }
+ * }
+ * 
+ * This structure is serialized to JSON, then base64-encoded,
+ * and sent in the X-PAYMENT header
  */
 typedef struct {
     int x402_version;               // Always 1
     char scheme[32];                // "exact", "sponsored", "subscription"
     char network[64];               // "solana-devnet", "solana-mainnet", etc.
     x402_network_payload_t payload; // Network-specific payload
-} x402_payment_kind_t;
-
-/**
- * @brief Complete Payment Payload (x402 spec)
- * 
- * This structure is serialized to JSON, then base64-encoded,
- * and sent in the X-PAYMENT header
- */
-typedef struct {
-    int version;                    // Always 1
-    x402_payment_kind_t kind;       // Payment kind details
 } x402_payment_payload_t;
 
 /**
@@ -60,12 +61,14 @@ typedef struct {
 typedef struct {
     char recipient[64];             // Payment recipient address (Base58)
     char network[64];               // "solana-devnet"
+    char asset[64];                 // Token mint address (Base58) for SPL tokens
     struct {
         char amount[32];            // Amount as string
         char currency[16];          // "USDC", "SOL", etc.
     } price;
     struct {
         char url[256];              // Facilitator URL
+        char fee_payer[64];         // Fee payer address (from /supported)
     } facilitator;
     bool valid;                     // Whether parsed successfully
 } x402_payment_requirements_t;
