@@ -40,9 +40,27 @@ extern const uint8_t USDC_DEVNET_MINT[32];
 #define SPL_TOKEN_TRANSFER_INSTRUCTION 3
 
 /**
+ * @brief Get the token program ID that owns a mint
+ * 
+ * Queries the Solana RPC to get the mint account info and extracts the owner
+ * (which is the token program ID - either Token or Token-2022).
+ * 
+ * @param rpc_url Solana RPC URL (e.g., "https://api.devnet.solana.com")
+ * @param mint_pubkey Token mint public key (32 bytes)
+ * @param program_id_out Output: Token program ID (32 bytes)
+ * @return ESP_OK on success
+ */
+esp_err_t spl_token_get_mint_program(
+    const char *rpc_url,
+    const uint8_t *mint_pubkey,
+    uint8_t *program_id_out
+);
+
+/**
  * @brief Derive Associated Token Account (ATA) address
  * 
  * Uses the standard ATA derivation: PDA of [wallet, token_program, mint]
+ * Uses SPL_TOKEN_PROGRAM_ID by default.
  * 
  * @param wallet_pubkey Wallet public key (32 bytes)
  * @param mint_pubkey Token mint public key (32 bytes)
@@ -52,6 +70,25 @@ extern const uint8_t USDC_DEVNET_MINT[32];
 esp_err_t spl_token_get_associated_token_address(
     const uint8_t *wallet_pubkey,
     const uint8_t *mint_pubkey,
+    uint8_t *ata_out
+);
+
+/**
+ * @brief Derive Associated Token Account (ATA) address with custom token program
+ * 
+ * Uses the standard ATA derivation: PDA of [wallet, token_program, mint]
+ * Allows specifying a custom token program ID (e.g., Token-2022).
+ * 
+ * @param wallet_pubkey Wallet public key (32 bytes)
+ * @param mint_pubkey Token mint public key (32 bytes)
+ * @param token_program_id Token program ID (32 bytes)
+ * @param ata_out Output: ATA address (32 bytes)
+ * @return ESP_OK on success
+ */
+esp_err_t spl_token_get_associated_token_address_with_program(
+    const uint8_t *wallet_pubkey,
+    const uint8_t *mint_pubkey,
+    const uint8_t *token_program_id,
     uint8_t *ata_out
 );
 
@@ -100,9 +137,11 @@ esp_err_t spl_token_build_transfer_instruction(
  * @return ESP_OK on success
  */
 esp_err_t spl_token_create_transfer_transaction(
+    const uint8_t *fee_payer,
     const uint8_t *from_wallet,
     const uint8_t *to_wallet,
     const uint8_t *mint,
+    const uint8_t *token_program_id,
     uint64_t amount,
     const uint8_t *recent_blockhash,
     uint8_t *tx_out,
