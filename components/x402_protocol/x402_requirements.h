@@ -60,6 +60,25 @@ esp_err_t x402_parse_price_to_amount(
     uint64_t *amount_out
 );
 
+/**
+ * @brief Query facilitator /supported endpoint for fee payer
+ * 
+ * Queries the facilitator's /supported endpoint to get the fee payer address
+ * that will be used to pay transaction fees.
+ * 
+ * @param facilitator_url Facilitator base URL
+ * @param network Network name (e.g., "solana-devnet")
+ * @param fee_payer_out Output: fee payer address (Base58)
+ * @param max_len Maximum length of fee_payer_out buffer
+ * @return ESP_OK on success
+ */
+esp_err_t x402_query_fee_payer(
+    const char *facilitator_url,
+    const char *network,
+    char *fee_payer_out,
+    size_t max_len
+);
+
 #ifdef __cplusplus
 }
 #endif
