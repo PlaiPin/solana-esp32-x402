@@ -19,22 +19,15 @@ char* x402_payload_to_json(const x402_payment_payload_t *payload) {
         return NULL;
     }
     
-    // Add version
-    cJSON_AddNumberToObject(root, "version", payload->version);
+    // Add fields at root level (FLAT structure)
+    cJSON_AddNumberToObject(root, "x402Version", payload->x402_version);
+    cJSON_AddStringToObject(root, "scheme", payload->scheme);
+    cJSON_AddStringToObject(root, "network", payload->network);
     
-    // Create "kind" object
-    cJSON *kind = cJSON_CreateObject();
-    cJSON_AddNumberToObject(kind, "x402Version", payload->kind.x402_version);
-    cJSON_AddStringToObject(kind, "scheme", payload->kind.scheme);
-    cJSON_AddStringToObject(kind, "network", payload->kind.network);
-    
-    // Create "payload" object (network-specific)
+    // Create "payload" object
     cJSON *network_payload = cJSON_CreateObject();
-    cJSON_AddStringToObject(network_payload, "transaction", payload->kind.payload.transaction);
-    cJSON_AddItemToObject(network_payload, "extra", cJSON_CreateObject()); // Empty extra object
-    
-    cJSON_AddItemToObject(kind, "payload", network_payload);
-    cJSON_AddItemToObject(root, "kind", kind);
+    cJSON_AddStringToObject(network_payload, "transaction", payload->payload.transaction);
+    cJSON_AddItemToObject(root, "payload", network_payload);
     
     // Serialize to string
     char *json_str = cJSON_PrintUnformatted(root);
@@ -46,7 +39,8 @@ char* x402_payload_to_json(const x402_payment_payload_t *payload) {
         return NULL;
     }
     
-    ESP_LOGD(TAG, "Serialized PaymentPayload: %s", json_str);
+    ESP_LOGI(TAG, "Serialized PaymentPayload JSON (first 200 chars): %.200s", json_str);
+    ESP_LOGI(TAG, "JSON length: %zu bytes", strlen(json_str));
     
     return json_str;
 }
