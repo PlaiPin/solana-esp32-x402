@@ -4,6 +4,7 @@
 #include "x402_encoding.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "mbedtls/base64.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -108,6 +109,8 @@ static esp_err_t http_request(
                 *colon = '\0';
                 char *value = colon + 1;
                 while (*value == ' ') value++; // Skip spaces
+                ESP_LOGI(TAG, "Setting header: '%s' = '%.80s%s'", 
+                         line, value, strlen(value) > 80 ? "..." : "");
                 esp_http_client_set_header(client, line, value);
             }
             line = strtok(NULL, "\r\n");
@@ -244,12 +247,14 @@ esp_err_t x402_fetch(
     
     ESP_LOGI(TAG, "Step 2: 402 Payment Required detected");
     
-    // Step 3: Parse payment requirements from body
+    // Step 3: Parse payment requirements from response body
     if (!resp_body) {
         ESP_LOGE(TAG, "402 response has no body");
         if (resp_headers) free(resp_headers);
         return ESP_FAIL;
     }
+    
+    ESP_LOGI(TAG, "Parsing payment requirements from body");
     
     x402_payment_requirements_t requirements;
     err = x402_parse_payment_requirements(resp_body, &requirements);
@@ -295,7 +300,8 @@ esp_err_t x402_fetch(
     }
     
     ESP_LOGI(TAG, "Step 5: Payment encoded");
-    ESP_LOGD(TAG, "X-PAYMENT (first 80 chars): %.80s", payment_encoded);
+    ESP_LOGI(TAG, "X-PAYMENT header (first 100 chars): %.100s", payment_encoded);
+    ESP_LOGI(TAG, "X-PAYMENT header length: %zu bytes", strlen(payment_encoded));
     
     // Step 6: Build retry headers with X-PAYMENT
     char *retry_headers = malloc(16384);
@@ -328,6 +334,17 @@ esp_err_t x402_fetch(
     
     ESP_LOGI(TAG, "Retry response: %d", status_code);
     
+    // Log response headers for debugging
+    if (resp_headers) {
+        ESP_LOGI(TAG, "Response headers:");
+        ESP_LOGI(TAG, "%s", resp_headers);
+    }
+    
+    // Log response body for debugging
+    if (resp_body && resp_body_len > 0) {
+        ESP_LOGI(TAG, "Response body: %.*s", (int)resp_body_len, resp_body);
+    }
+    
     // Step 8: Parse X-PAYMENT-RESPONSE header (if present)
     if (resp_headers) {
         char payment_response[4096];
@@ -335,6 +352,7 @@ esp_err_t x402_fetch(
                                payment_response, sizeof(payment_response))) {
             
             ESP_LOGI(TAG, "Step 7: Payment response received");
+            ESP_LOGI(TAG, "X-PAYMENT-RESPONSE: %s", payment_response);
             
             x402_settlement_response_t settlement;
             err = x402_decode_settlement_response(payment_response, &settlement);
@@ -350,7 +368,7 @@ esp_err_t x402_fetch(
                 ESP_LOGW(TAG, "Failed to decode payment response");
             }
         } else {
-            ESP_LOGD(TAG, "No X-PAYMENT-RESPONSE header found");
+            ESP_LOGW(TAG, "No X-PAYMENT-RESPONSE header found");
         }
     }
     
@@ -362,6 +380,9 @@ esp_err_t x402_fetch(
     
     if (status_code == 200) {
         ESP_LOGI(TAG, "=== ✓ x402 fetch successful! ===");
+    } else if (status_code == 402) {
+        ESP_LOGE(TAG, "Payment was rejected by the API server!");
+        ESP_LOGE(TAG, "Check the response body above for error details");
     } else {
         ESP_LOGW(TAG, "Unexpected status: %d", status_code);
     }
