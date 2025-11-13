@@ -37,6 +37,7 @@ esp_err_t x402_create_solana_payment(
  * @param wallet User wallet
  * @param recipient_pubkey Recipient public key (32 bytes)
  * @param mint_pubkey Token mint public key (32 bytes, e.g., USDC)
+ * @param token_program_id Token program ID (32 bytes, Token or Token-2022)
  * @param amount Amount in token's smallest unit
  * @param tx_out Output: serialized unsigned transaction
  * @param tx_len Output: transaction length
@@ -45,8 +46,10 @@ esp_err_t x402_create_solana_payment(
  */
 esp_err_t x402_build_payment_transaction(
     solana_wallet_t *wallet,
+    const uint8_t *fee_payer_pubkey,
     const uint8_t *recipient_pubkey,
     const uint8_t *mint_pubkey,
+    const uint8_t *token_program_id,
     uint64_t amount,
     uint8_t *tx_out,
     size_t *tx_len,

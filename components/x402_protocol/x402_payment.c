@@ -34,14 +34,16 @@ static esp_err_t ensure_rpc_client(void) {
 
 esp_err_t x402_build_payment_transaction(
     solana_wallet_t *wallet,
+    const uint8_t *fee_payer_pubkey,
     const uint8_t *recipient_pubkey,
     const uint8_t *mint_pubkey,
+    const uint8_t *token_program_id,
     uint64_t amount,
     uint8_t *tx_out,
     size_t *tx_len,
     size_t max_tx_len
 ) {
-    if (!wallet || !recipient_pubkey || !mint_pubkey || !tx_out || !tx_len) {
+    if (!wallet || !fee_payer_pubkey || !recipient_pubkey || !mint_pubkey || !token_program_id || !tx_out || !tx_len) {
         return ESP_ERR_INVALID_ARG;
     }
     
@@ -106,11 +108,13 @@ esp_err_t x402_build_payment_transaction(
     
     ESP_LOGI(TAG, "Building SPL token transfer transaction...");
     
-    // Build SPL token transfer transaction
+    // Build SPL token transfer transaction with fee payer
     err = spl_token_create_transfer_transaction(
+        fee_payer_pubkey,
         wallet_pubkey,
         recipient_pubkey,
         mint_pubkey,
+        token_program_id,
         amount,
         blockhash,
         tx_out,
@@ -164,32 +168,81 @@ esp_err_t x402_create_solana_payment(
         return ESP_FAIL;
     }
     
-    // Step 2: Get mint pubkey (assume USDC for now)
-    const uint8_t *mint_pubkey = USDC_DEVNET_MINT;
+    // Step 2: Decode mint pubkey from requirements.asset
+    uint8_t mint_pubkey[32];
+    size_t mint_len;
+    if (!base58_decode(
+        requirements->asset,
+        mint_pubkey,
+        &mint_len,
+        sizeof(mint_pubkey)
+    ) || mint_len != 32) {
+        ESP_LOGE(TAG, "Failed to decode asset/mint address");
+        return ESP_FAIL;
+    }
     
-    // Step 3: Parse amount (handles both USD "$0.0001" and raw amounts "100")
-    uint64_t amount;
-    err = spl_token_parse_usd_amount(
-        requirements->price.amount, 
-        USDC_DECIMALS, 
-        &amount
-    );
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to parse amount from: %s", requirements->price.amount);
-        return err;
+    // Step 3: Parse amount (already in base units/lamports from API)
+    // The maxAmountRequired field is sent as base units (e.g., "100" = 100 lamports = 0.0001 USDC)
+    uint64_t amount = 0;
+    char *endptr;
+    amount = strtoull(requirements->price.amount, &endptr, 10);
+    
+    if (endptr == requirements->price.amount || *endptr != '\0') {
+        ESP_LOGE(TAG, "Failed to parse amount as integer: %s", requirements->price.amount);
+        return ESP_FAIL;
+    }
+    
+    if (amount == 0) {
+        ESP_LOGE(TAG, "Invalid amount: %s (parsed as 0)", requirements->price.amount);
+        return ESP_FAIL;
     }
     
     ESP_LOGI(TAG, "Creating payment: %llu to %s",
              amount, requirements->recipient);
     
-    // Step 4: Build transaction
+    // Step 4: Use fee payer from requirements (already parsed from extra.feePayer)
+    if (!requirements->facilitator.fee_payer[0]) {
+        ESP_LOGE(TAG, "No fee payer provided in payment requirements");
+        return ESP_FAIL;
+    }
+    
+    // Decode fee payer address
+    uint8_t fee_payer_pubkey[32];
+    size_t fee_payer_len;
+    if (!base58_decode(
+        requirements->facilitator.fee_payer,
+        fee_payer_pubkey,
+        &fee_payer_len,
+        sizeof(fee_payer_pubkey)
+    ) || fee_payer_len != 32) {
+        ESP_LOGE(TAG, "Failed to decode fee payer address");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Fee payer: %s", requirements->facilitator.fee_payer);
+    
+    // Step 5: Get token program ID for the mint (Token or Token-2022)
+    uint8_t token_program_id[32];
+    err = spl_token_get_mint_program(
+        "https://api.devnet.solana.com",
+        mint_pubkey,
+        token_program_id
+    );
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get token program for mint");
+        return err;
+    }
+    
+    // Step 6: Build transaction with fee payer
     uint8_t tx_data[2048];
     size_t tx_len;
     
     err = x402_build_payment_transaction(
         wallet,
+        fee_payer_pubkey,
         recipient_pubkey,
         mint_pubkey,
+        token_program_id,
         amount,
         tx_data,
         &tx_len,
@@ -201,11 +254,11 @@ esp_err_t x402_create_solana_payment(
         return err;
     }
     
-    // Step 5: Sign transaction
+    // Step 7: Sign transaction
     // The transaction has 2 signature placeholders:
-    // [1 byte sig count][64 bytes user sig][64 bytes fee payer sig][message]
-    // We sign the message and put our signature in the first slot
-    // Kora/facilitator will add fee payer signature in the second slot
+    // [1 byte sig count][64 bytes fee_payer sig][64 bytes user sig][message]
+    // We sign the message and put our signature in the SECOND slot
+    // Kora/facilitator will add fee payer signature in the FIRST slot
     
     // Extract message (skip sig count + 2 sig placeholders)
     const uint8_t *message = tx_data + 1 + 64 + 64; // After both sig slots
@@ -218,13 +271,13 @@ esp_err_t x402_create_solana_payment(
         return err;
     }
     
-    // Put our signature in first slot (user signature)
-    memcpy(tx_data + 1, signature, 64);
-    // Second slot (fee payer signature) remains zeros - Kora fills this
+    // Put our signature in SECOND slot (user signature, account[1])
+    memcpy(tx_data + 1 + 64, signature, 64); // After fee_payer slot
+    // First slot (fee payer signature, account[0]) remains zeros - Kora fills this
     
     ESP_LOGI(TAG, "Transaction signed successfully");
     
-    // Step 6: Base64 encode transaction
+    // Step 8: Base64 encode transaction
     char *tx_b64 = malloc(4096);
     if (!tx_b64) {
         ESP_LOGE(TAG, "Failed to allocate base64 buffer");
@@ -241,16 +294,15 @@ esp_err_t x402_create_solana_payment(
     
     ESP_LOGD(TAG, "Transaction base64 (first 80 chars): %.80s", tx_b64);
     
-    // Step 7: Create PaymentPayload structure
-    payload_out->version = 1;
-    payload_out->kind.x402_version = 1;
-    strncpy(payload_out->kind.scheme, X402_SCHEME_EXACT,
-            sizeof(payload_out->kind.scheme) - 1);
-    payload_out->kind.scheme[sizeof(payload_out->kind.scheme) - 1] = '\0';
-    strncpy(payload_out->kind.network, requirements->network,
-            sizeof(payload_out->kind.network) - 1);
-    payload_out->kind.network[sizeof(payload_out->kind.network) - 1] = '\0';
-    payload_out->kind.payload.transaction = tx_b64; // Transfer ownership
+    // Step 9: Create PaymentPayload structure (FLAT structure)
+    payload_out->x402_version = 1;
+    strncpy(payload_out->scheme, X402_SCHEME_EXACT,
+            sizeof(payload_out->scheme) - 1);
+    payload_out->scheme[sizeof(payload_out->scheme) - 1] = '\0';
+    strncpy(payload_out->network, requirements->network,
+            sizeof(payload_out->network) - 1);
+    payload_out->network[sizeof(payload_out->network) - 1] = '\0';
+    payload_out->payload.transaction = tx_b64; // Transfer ownership
     
     ESP_LOGI(TAG, "✓ Payment payload created successfully");
     
@@ -258,9 +310,9 @@ esp_err_t x402_create_solana_payment(
 }
 
 void x402_payment_free(x402_payment_payload_t *payload) {
-    if (payload && payload->kind.payload.transaction) {
-        free(payload->kind.payload.transaction);
-        payload->kind.payload.transaction = NULL;
+    if (payload && payload->payload.transaction) {
+        free(payload->payload.transaction);
+        payload->payload.transaction = NULL;
     }
 }
 
