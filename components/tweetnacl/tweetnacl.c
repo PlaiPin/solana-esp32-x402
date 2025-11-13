@@ -740,7 +740,7 @@ int crypto_sign(u8 *sm,u64 *smlen,const u8 *m,u64 n,const u8 *sk)
   return 0;
 }
 
-static int unpackneg(gf r[4],const u8 p[32])
+int unpackneg(gf r[4],const u8 p[32])
 {
   gf t, chk, num, den, den2, den4, den6;
   set25519(r[2],gf1);
