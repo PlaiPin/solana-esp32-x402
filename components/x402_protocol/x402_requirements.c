@@ -98,13 +98,17 @@ esp_err_t x402_parse_payment_requirements(
     
     requirements_out->valid = true;
     
+    // Parse amount for logging (show both base units and USD equivalent)
+    uint64_t amount_lamports = strtoull(requirements_out->price.amount, NULL, 10);
+    double amount_usdc = (double)amount_lamports / 1000000.0; // USDC has 6 decimals
+    
     ESP_LOGI(TAG, "Parsed payment requirements:");
     ESP_LOGI(TAG, "  Recipient: %s", requirements_out->recipient);
     ESP_LOGI(TAG, "  Network: %s", requirements_out->network);
     ESP_LOGI(TAG, "  Asset: %s", requirements_out->asset);
-    ESP_LOGI(TAG, "  Amount: %s %s", 
+    ESP_LOGI(TAG, "  Amount: %s lamports (%.6f USDC)", 
              requirements_out->price.amount,
-             requirements_out->price.currency);
+             amount_usdc);
     if (requirements_out->facilitator.fee_payer[0]) {
         ESP_LOGI(TAG, "  Fee Payer: %s", requirements_out->facilitator.fee_payer);
     }

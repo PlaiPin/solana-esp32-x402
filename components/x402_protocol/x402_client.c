@@ -421,7 +421,10 @@ esp_err_t x402_verify_payment(
     ESP_LOGI(TAG, "Verifying payment on-chain...");
     ESP_LOGI(TAG, "Transaction: %s", tx_signature);
     ESP_LOGI(TAG, "Expected recipient: %s", expected_recipient);
-    ESP_LOGI(TAG, "Expected amount: %llu", expected_amount);
+    
+    // Calculate USD equivalent for logging (USDC has 6 decimals)
+    double amount_usdc = (double)expected_amount / 1000000.0;
+    ESP_LOGI(TAG, "Expected amount: %llu lamports (%.6f USDC)", expected_amount, amount_usdc);
     
     // TODO: Implement full RPC query to getTransaction
     // For now, we trust the API's X-PAYMENT-RESPONSE

@@ -197,8 +197,10 @@ esp_err_t x402_create_solana_payment(
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "Creating payment: %llu to %s",
-             amount, requirements->recipient);
+    // Calculate USD equivalent for logging (USDC has 6 decimals)
+    double amount_usdc = (double)amount / 1000000.0;
+    ESP_LOGI(TAG, "Creating payment: %llu lamports (%.6f USDC) to %s",
+             amount, amount_usdc, requirements->recipient);
     
     // Step 4: Use fee payer from requirements (already parsed from extra.feePayer)
     if (!requirements->facilitator.fee_payer[0]) {
